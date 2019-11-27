@@ -6,6 +6,8 @@ using System.Text;
 
 public class Integral : MonoBehaviour
 {
+    public GameObject cube;
+    private GameObject[,] cubes;
     private string PATH_TO_PCACHE_DIR ="/PointCache/";
     [Tooltip("***.pcache in Assets/PointCache")]
     [SerializeField]private string PCACHE_FILE_NAME;
@@ -92,7 +94,20 @@ public class Integral : MonoBehaviour
         for(int z=0; z<zMeshCnt; z++){
             for(int x=0; x<xMeshCnt; x++){
                 if(numPoints[x,z]!=0) mesh[x,z]/=numPoints[x,z];
-                vol += mesh[x,z]*MESH_SIZE*MESH_SIZE;
+                if(mesh[x,z]>0) vol += mesh[x,z]*MESH_SIZE*MESH_SIZE;
+            }
+        }
+
+        // visualization
+        cubes = new GameObject[xMeshCnt,zMeshCnt];
+        for(int z=0; z<zMeshCnt; z++){
+            for(int x=0; x<xMeshCnt; x++){
+                float height = mesh[x,z]+BASE_ELE;
+                Vector3 pos = new Vector3((x+xBias)*MESH_SIZE, height/2f, (z+zBias)*MESH_SIZE);
+                cubes[x,z] = Instantiate(cube, pos, Quaternion.identity);
+                Vector3 scale = new Vector3(MESH_SIZE, height, MESH_SIZE);
+                cubes[x,z].transform.localScale = scale;
+                if(height==0f)cubes[x,z].GetComponent<Renderer>().material.color = Color.red;
             }
         }
         Debug.Log(vol);

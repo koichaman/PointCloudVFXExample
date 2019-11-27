@@ -323,8 +323,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3adfe5c984b2df645ab56ea310196478, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  cube: {fileID: 2128584749}
   PCACHE_FILE_NAME: 3DSample4.pcache
-  MESH_SIZE: 0.1
+  MESH_SIZE: 1
   BASE_ELE: 0
 --- !u!4 &1170391644
 Transform:
@@ -493,7 +494,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 10754, guid: 0000000000000000f000000000000000, type: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
