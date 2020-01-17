@@ -66,5 +66,8 @@ sysinfo.txt
 # Crashlytics generated file
 crashlytics-build.properties
 
+# pcache files and pcache meta files
+*.pcache
+*.pcache.mete
 
 # End of https://www.gitignore.io/api/unity
