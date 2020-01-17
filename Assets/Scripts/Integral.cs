@@ -4,6 +4,7 @@ using UnityEngine;
 using System.IO;
 using System.Text;
 
+// [ExecuteInEditMode]
 public class Integral : MonoBehaviour
 {
     public GameObject cube;
@@ -15,11 +16,15 @@ public class Integral : MonoBehaviour
     [SerializeField]private float MESH_SIZE;
     [Tooltip("The base elevation used for integral [m]")]
     [SerializeField]private float BASE_ELE;
+    [SerializeField]private List<Vector2> poly;
     // [SerializeField]private float DENSE_AREA_SIZE;
     private List<Vector3> points = new List<Vector3>();
     private float xMax, xMin, zMax, zMin;
     private float vol = 0f;
     private int xMeshCnt, zMeshCnt, xBias, zBias;
+    private float[,] mesh; //the center point of mesh[x,z] is [(x+xBias)*MESH_SIZE, (z+zBias)*MESH_SIZE]
+    private int[,] numPoints; //the number of points which are included in the mesh
+    private float excludeValue = -10000;
 
     // Start is called before the first frame update
     void Start()
@@ -27,8 +32,6 @@ public class Integral : MonoBehaviour
         Debug.Log(Application.dataPath + PATH_TO_PCACHE_DIR + PCACHE_FILE_NAME);
         StreamReader sr = new StreamReader(Application.dataPath + PATH_TO_PCACHE_DIR + PCACHE_FILE_NAME);
         bool isHeader = true;
-        float[,] mesh; //the center point of mesh[x,z] is [(x+xBias)*MESH_SIZE, (z+zBias)*MESH_SIZE]
-        int[,] numPoints; //the number of points which are included in the mesh
 
         // import xyz data from ***.pcache to "points"
         // and calcurate max and min of x and z
@@ -69,12 +72,14 @@ public class Integral : MonoBehaviour
         // start point of mesh
         xBias = Mathf.RoundToInt(xMin/MESH_SIZE);
         zBias = Mathf.RoundToInt(zMin/MESH_SIZE);
+
         // number of meshes
         xMeshCnt = Mathf.RoundToInt(xMax/MESH_SIZE) - xBias + 1;
         zMeshCnt = Mathf.RoundToInt(zMax/MESH_SIZE) - zBias + 1;
         // initialize the array of mesh and number of points
         mesh = new float[xMeshCnt, zMeshCnt];
         numPoints = new int[xMeshCnt, zMeshCnt];
+        cubes = new GameObject[xMeshCnt, zMeshCnt];
         for(int z=0; z<zMeshCnt; z++){
             for(int x=0; x<xMeshCnt; x++){
                 mesh[x,z] = 0f;
@@ -97,16 +102,21 @@ public class Integral : MonoBehaviour
                 if(mesh[x,z]>0) vol += mesh[x,z]*MESH_SIZE*MESH_SIZE;
             }
         }
-
+        // preparing visualization cubes
+        for(int z=0; z<zMeshCnt; z++){
+            for(int x=0; x<xMeshCnt; x++) cubes[x,z] = Instantiate(cube, new Vector3(0f, 0f, 0f), Quaternion.identity);
+        }
+        // zoning of  the integral area
+        zoneMask();
         // visualization
-        cubes = new GameObject[xMeshCnt,zMeshCnt];
         for(int z=0; z<zMeshCnt; z++){
             for(int x=0; x<xMeshCnt; x++){
                 float height = mesh[x,z]+BASE_ELE;
                 Vector3 pos = new Vector3((x+xBias)*MESH_SIZE, height/2f, (z+zBias)*MESH_SIZE);
-                cubes[x,z] = Instantiate(cube, pos, Quaternion.identity);
-                Vector3 scale = new Vector3(MESH_SIZE, height, MESH_SIZE);
-                cubes[x,z].transform.localScale = scale;
+                Vector3 scale = new Vector3(MESH_SIZE, Mathf.Abs(height), MESH_SIZE);
+                Transform tr = cubes[x,z].transform;
+                tr.position = pos;
+                tr.localScale = scale;
                 if(height==0f)cubes[x,z].GetComponent<Renderer>().material.color = Color.red;
             }
         }
@@ -117,5 +127,57 @@ public class Integral : MonoBehaviour
     void Update()
     {
 
+    }
+
+    void zoneMask(){
+        // convert poly points to mesh positions
+        for(int i=0; i<poly.Count; i++){
+            Vector2 p = poly[i];
+            p.x = Mathf.Round(poly[i].x/MESH_SIZE)-(float)xBias;
+            p.y = Mathf.Round(poly[i].y/MESH_SIZE)-(float)zBias;
+        }
+        // set the value of meshes on polyline to 0
+        for(int i=0; i<poly.Count; i++){
+            Debug.Log("i:"+i);
+            int next = (i+1)%poly.Count;
+            int diffX = (int)(poly[next].x-poly[i].x);
+            if(diffX!=0){
+                float slope = (poly[next].y-poly[i].y)/(poly[next].x-poly[i].x);
+                float intercept = (poly[next].x*poly[i].y - poly[i].x*poly[next].y)/(poly[next].x - poly[i].x);
+                for(int j=0; Mathf.Abs(j)<Mathf.Abs(diffX); j+=(int)Mathf.Sign(diffX)){
+                    Debug.Log("j:"+j);
+                    int now = Mathf.RoundToInt(slope*(poly[i].x+j)+intercept);
+                    int nextZ = Mathf.RoundToInt(slope*(poly[i].x+j+1)+intercept);
+                    Debug.Log("slope:"+slope+" intercept:"+intercept);
+                    Debug.Log("now:"+now+" nextY:"+nextZ);
+                    mesh[(int)poly[i].x+j, now] = excludeValue;
+                    cubes[(int)poly[i].x+j, now].GetComponent<Renderer>().material.color = Color.blue;
+                    for(int k=1; Mathf.Abs(k)<Mathf.Abs(nextZ-now); k+=(int)Mathf.Sign(nextZ-now)){
+                        Debug.Log("k:"+k);
+                        mesh[(int)poly[i].x+j, now+k] = excludeValue;
+                        cubes[(int)poly[i].x+j, now+k].GetComponent<Renderer>().material.color = Color.blue;
+                    }
+                }
+            }
+            else{
+                int diffZ = (int)(poly[next].y-poly[i].y);
+                for(int j=0; Mathf.Abs(j)<=Mathf.Abs(diffZ); j+=(int)Mathf.Sign(diffZ)){
+                    mesh[(int)poly[i].x, (int)poly[i].y+j] = excludeValue;
+                    cubes[(int)poly[i].x, (int)poly[i].y+j].GetComponent<Renderer>().material.color = Color.blue;
+                }
+            }
+        }
+        // set the value of meshes outside of poly to 0
+        bool keepLoop = true;
+        while(keepLoop){
+            keepLoop = false;
+            List<int> excludeKeys;
+            for(int x=0; x<xMeshCnt; x++){
+                for(int z=0; z<zMeshCnt; z++){
+                    // kokokara
+                }
+            }
+
+        }
     }
 }
