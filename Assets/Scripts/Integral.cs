@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -37,10 +38,14 @@ public class Integral : MonoBehaviour
     {
         initMesh();
         initBasePlane();
+        // complement basePlaneMesh
+        compBasePlane();
         // zoning of  the integral area
         zoneMask();
+        compBasePlaneVisualization();
         // calculate Volume
         vol = calcVolume();
+        Debug.Log("Calcurated volume is "+vol+"m^3");
     }
     // Update is called once per frame
     void Update()
@@ -130,7 +135,7 @@ public class Integral : MonoBehaviour
         for(int z=0; z<zMeshCnt; z++){
             for(int x=0; x<xMeshCnt; x++){
                 if(numPoints[x,z]!=0) basePlaneMesh[x,z]/=numPoints[x,z];
-                else mesh[x,z] = excludedValue;
+                else basePlaneMesh[x,z] = excludedValue;
             }
         }
     }
@@ -156,25 +161,21 @@ public class Integral : MonoBehaviour
             Vector2 p = poly[i];
             p.x = Mathf.Round(poly[i].x/MESH_SIZE)-(float)xBias;
             p.y = Mathf.Round(poly[i].y/MESH_SIZE)-(float)zBias;
+            poly[i] = p;
         }
         // set the value of meshes on polyline to edgeValue
         for(int i=0; i<poly.Count; i++){
-            Debug.Log("i:"+i);
             int next = (i+1)%poly.Count;
             int diffX = (int)(poly[next].x-poly[i].x);
             if(diffX!=0){
                 float slope = (poly[next].y-poly[i].y)/(poly[next].x-poly[i].x);
                 float intercept = (poly[next].x*poly[i].y - poly[i].x*poly[next].y)/(poly[next].x - poly[i].x);
-                Debug.Log("slope:"+slope+" intercept:"+intercept);
                 for(int j=0; Mathf.Abs(j)<Mathf.Abs(diffX); j+=(int)Mathf.Sign(diffX)){
-                    Debug.Log("j:"+j);
                     int now = Mathf.RoundToInt(slope*(poly[i].x+j)+intercept);
                     int nextZ = Mathf.RoundToInt(slope*(poly[i].x+j+(int)Mathf.Sign(diffX))+intercept);
-                    Debug.Log("now:"+now+" nextZ:"+nextZ);
                     mesh[(int)poly[i].x+j, now] = edgeValue;
                     cubes[(int)poly[i].x+j, now].GetComponent<Renderer>().material.SetColor("_BaseColor", Color.blue);
                     for(int k=(int)Mathf.Sign(nextZ-now); Mathf.Abs(k)<Mathf.Abs(nextZ-now); k+=(int)Mathf.Sign(nextZ-now)){
-                        Debug.Log("k:"+k);
                         mesh[(int)poly[i].x+j, now+k] = edgeValue;
                         cubes[(int)poly[i].x+j, now+k].GetComponent<Renderer>().material.SetColor("_BaseColor", Color.blue);
                     }
@@ -260,11 +261,64 @@ public class Integral : MonoBehaviour
         }
     }
 
+    void compBasePlane(){
+        bool keepLoop = true;
+        while(keepLoop){
+            keepLoop = false;
+            for(int x=0; x<xMeshCnt; x++){
+                for(int z=0; z<zMeshCnt; z++){
+                    if(mesh[x,z]!=excludedValue && basePlaneMesh[x,z]==excludedValue){
+                        List<int[]> nearIndex = makeNearIndex(x,z);
+                        int num = 0;
+                        float ave = 0;
+                        foreach(int[] index in nearIndex){
+                            if(basePlaneMesh[index[0],index[1]]!=excludedValue){
+                                ave+=basePlaneMesh[index[0],index[1]];
+                                num++;
+                            }
+                        }
+                        if(num > 0){
+                            ave /= (float)num;
+                            basePlaneMesh[x,z] = ave;
+                            keepLoop = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void compBasePlaneVisualization(){
+        for(int x=0; x<xMeshCnt; x++){
+            for(int z=0; z<zMeshCnt; z++){
+                if(mesh[x,z]!=excludedValue && basePlaneMesh[x,z]==excludedValue){
+                    cubes[x,z].GetComponent<Renderer>().material.SetColor("_BaseColor", Color.red);
+                    float trueX = (x+xBias)*MESH_SIZE;
+                    float trueZ = (z+zBias)*MESH_SIZE;
+                }
+            }
+        }
+    }
+
+    List<int[]> makeNearIndex(int inputX, int inputZ){
+        List<int[]> result = new List<int[]>();
+        bool xIsMin = (inputX==0);
+        bool xIsMax = (inputX==xMeshCnt-1);
+        bool zIsMin = (inputZ==0);
+        bool zIsMax = (inputZ==zMeshCnt-1);
+        for(int x=inputX-1*Convert.ToInt32(!xIsMin); x<=inputX+1*Convert.ToInt32(!xIsMax); x++){
+            for(int z=inputZ-1*Convert.ToInt32(!zIsMin); z<=inputZ+1*Convert.ToInt32(!zIsMax); z++){
+                if(x!=inputX||z!=inputZ)result.Add(new int[2]{x,z});
+            }
+        }
+        return result;
+    }
+
     float calcVolume(){
         float vol = 0;
         for(int x=0; x<xMeshCnt; x++){
             for(int z=0; z<zMeshCnt; z++){
-                if(mesh[x,z]!=excludedValue)vol+=(mesh[x,z]-basePlaneMesh[x,z])*MESH_SIZE*MESH_SIZE;
+                if(mesh[x,z]!=excludedValue && mesh[x,z]!=edgeValue)vol+=(mesh[x,z]-basePlaneMesh[x,z])*MESH_SIZE*MESH_SIZE;
             }
         }
         return vol;
